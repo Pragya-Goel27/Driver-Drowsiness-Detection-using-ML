@@ -1,0 +1,192 @@
+# import dependencies for the whole project
+import tensorflow as tf
+import cv2
+import os
+import matplotlib.pyplot as plt
+import numpy as np
+
+# training data demonstration
+img_array = cv2.imread("train\closed\s0001_00002_0_0_0_0_0_01.png")
+plt.imshow(img_array , cmap="gray")
+
+# read all images from folder and convert them to array of data and labels(classes)
+datadir = "train/"
+classes = ["closed", "open"] # defining 2 states, this is what the model will predict
+img_size = 224
+training_data = []
+
+def training():
+    for category in classes:
+        path = os.path.join(datadir, category)
+        class_num  = classes.index(category)
+        counter = 1900 # setting a limit on training data, this is done because the dataset has 80k images and will be harder to compute on a laptop
+        for img in os.listdir(path):
+            try:
+                img_array = cv2.imread(os.path.join(path, img) , cv2.IMREAD_GRAYSCALE) # read each image
+                rgb = cv2.cvtColor(img_array,cv2.COLOR_GRAY2RGB) #convert to RGB
+                new_array = cv2.resize(rgb, (img_size, img_size)) # resize to fit
+                training_data.append([new_array ,class_num]) # add to training list
+                counter-=1
+                print(counter)
+                if counter == 0:
+                    break
+            except Exception as e:
+                pass
+training()
+
+len(training_data)
+
+import random # shuffle data to avoid overfitting
+random.shuffle(training_data)
+
+X = [] # features, image array representation
+y = [] # labels , closed or open
+
+for features, label in training_data:
+    X.append(features) #  img arr
+    y.append(label) # 1 or 0 (closed or open)
+
+X = np.array(X).reshape(-1, img_size, img_size,3)
+Y= np.array(y)
+X = X/255.0
+print(X.shape)
+print(Y.shape)
+
+from tensorflow import keras
+from tensorflow.keras import layers
+
+model = tf.keras.applications.mobilenet.MobileNet() # loading Mobile net model
+
+model.summary()
+
+base_input = model.layers[0].input
+base_output = model.layers[-4].output
+
+Flat_layer = layers.Flatten()(base_output)
+final_output = layers.Dense(1)(Flat_layer)
+final_output = layers.Activation("sigmoid")(final_output)
+
+new_model = keras.Model(inputs=base_input, outputs=final_output)
+
+new_model.summary()
+
+#training
+#new_model.compile(loss="binary_crossentropy", optimizer="adam", metrics =["accuracy"])
+#new_model.fit(X,Y,epochs=5)
+# loading saved model
+new_model =  tf.keras.models.load_model("/content/drive/MyDrive/Drowsiness Detection/trained.h5")
+
+# saving trained model 
+new_model.save("trained.h5")
+
+# test drive of the trained model - seen image
+img_array = cv2.imread("/content/drive/MyDrive/Drowsiness Detection/open_train.png" , cv2.IMREAD_GRAYSCALE)
+rgb = cv2.cvtColor(img_array,cv2.COLOR_GRAY2RGB)
+new_array = cv2.resize(rgb, (224, 224))
+X_input = np.array(new_array).reshape(1, 224,224 ,3)
+X_input.shape
+X_input = X_input/255.0
+pred = new_model.predict(X_input)
+pred
+
+# test drive of the trained model - unseen image
+img_arr = cv2.imread("/content/drive/MyDrive/Drowsiness Detection/image.jpg", cv2.COLOR_BGR2RGB)
+plt.imshow(img_arr)
+
+# run this block 2 times
+
+# loading a face and eyes detector, using cv2's internal detection system
+face_cascade = cv2.CascadeClassifier('/content/drive/MyDrive/Drowsiness Detection/haarcascade_frontalface_default.xml')
+
+eye_cascade = cv2.CascadeClassifier('/content/drive/MyDrive/Drowsiness Detection/haarcascade_eye.xml')
+
+gray = cv2.cvtColor(img_arr, cv2.COLOR_BGR2GRAY)
+plt.imshow(gray)
+eyes = eye_cascade.detectMultiScale(gray,1.1,4) # detect eyes
+
+for(x,y,w,h) in eyes:
+    roi_gray = gray[y:y+h , x:x+w] # mark region of interest
+    roi_color = img_arr[y:y+h , x:x+w] # mark region of interest for model (Mobilenet works on 3 channels RGB)
+    eyess = eye_cascade.detectMultiScale(roi_gray)
+    print(eyess)
+    if len(eyess) == 0:
+        print("no eyes")
+    else:
+        for (ex,ey, ew, eh) in eyess:
+            eyes_roi = roi_color[ey:ey+eh, ex:ex+ew] # crop and store eyes
+            
+    cv2.rectangle(img_arr,(x,y), (x+w, y+h),(0,255,0),2)
+#plt.imshow(cv2.cvtColor(eyes_roi , cv2.COLOR_BGR2RGB))
+
+plt.imshow(cv2.cvtColor(eyes_roi , cv2.COLOR_BGR2RGB)) # display only eyes
+eyes_roi.shape
+
+# resizing and preprocessing eyes data from picture for next stage, prediction 
+final_img = cv2.resize(eyes_roi,(224,224))
+final_img = np.expand_dims(final_img,axis=0)
+final_img = final_img / 255.0
+final_img.shape
+
+pred=new_model.predict(final_img) # prediction if eyes closed or open
+
+if pred > 0.5:
+    print("Eyes Open")
+else:
+    print("Eyes Closed")
+    
+!pip install winsound
+
+# webcam
+import winsoun\]d
+frequency = 2500
+duration = 1000
+counter = 0 
+import cv2
+path = "haarcascade_frontalface_default.xml"
+face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+
+cap = cv2.VideoCapture(1)
+if not cap.isOpened():
+    cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    raise IOError("Cannot open webcam")
+
+while True:
+    ret,frame = cap.read()
+    eye_cascade = cv2.CascadeClassifier('haarcascade_eye.xml')
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    eyes = eye_cascade.detectMultiScale(gray,1.1, 4)
+    for x,y,w,h in eyes:
+        roi_gray = gray[y:y+h, x:x+w]
+        roi_color = frame[y:y+h, x:x+w]
+        cv2.rectangle(frame, (x,y), (x+w , y+h) , (0,255,0), 2)
+        eyess = eye_cascade.detectMultiScale(roi_gray)
+        
+        if len(eyess) == 0:
+            print("no eyes")
+        else:
+            for (ex, ey,ew,eh) in eyess:
+                eyes_roi = roi_color[ey:ey+eh, ex:ex +ew]
+    final_image = cv2.resize(eyes_roi, (224,224))
+    final_image = np.expand_dims(final_image, axis=0)
+    final_image =  final_image/255.0
+    predictions = new_model.predict(final_image)
+    if predictions>0.5:
+        status = "Open eyes"
+    else:
+        counter +=1
+        if counter > 5:
+            winsound.Beep(frequency, duration)
+            counter = 0
+        status = "closed eyes"
+    gray = cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
+    faces = face_cascade.detectMultiScale(gray,1.1,4)
+    for (x,y,w,h) in faces:
+        cv2.rectangle(frame,(x,y) , (x+w , y+w),(0,255,0) ,2)
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    cv2.putText(frame, status,(50,50), font,3,(0,0,255),2,cv2.LINE_4)
+    cv2.imshow("",frame)
+    if cv2.waitKey(2) & 0xFF == ord("q"):
+        break
+cap.release()
+cv2.destroyAllWindows()
